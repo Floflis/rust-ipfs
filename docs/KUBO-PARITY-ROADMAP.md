@@ -255,3 +255,28 @@ Use the official Kubo documentation and protocol specifications as living refere
 - IPNS specification: https://specs.ipfs.tech/ipns/
 
 Re-check defaults and behavior against the exact Kubo release selected for compatibility testing. Documentation and protocol specifications evolve.
+
+
+## 10. Iroh-compatible whole-file CID
+
+The native CLI includes a deliberate non-UnixFS content-addressing operation:
+
+```sh
+ipfs cid --iroh-hash ./large-file.bin
+```
+
+The operation:
+
+1. streams the complete file through BLAKE3-256;
+2. wraps the 32-byte digest as a multihash using code `0x1e`;
+3. emits a CIDv1 with the `raw` codec (`0x55`).
+
+The BLAKE3 digest is the same content identity used by Iroh blobs. The CID is an interoperable Multiformats encoding of that digest, not Iroh's native hash-string representation. Iroh's verified transfer format (Bao) is a transport/verification layer and is not embedded in this CID.
+
+This must remain separate from `ipfs add --only-hash`: UnixFS import chunking and DAG layout produce a different root identity. This command does not start an IPFS node, create UnixFS nodes, store blocks, pin content, or announce providers. It accepts a regular file and hashes it in bounded memory.
+
+The output identifies the whole file as one `raw` block. A CID can be computed for files of arbitrary size, but this alone does not make an oversized raw block Bitswap-compatible. Bitswap requires implementations to support blocks up to 2 MiB and discourages larger blocks. For large-content distribution, use Iroh's blob transfer or an IPFS UnixFS DAG with appropriately sized blocks.
+
+The BLAKE3 multicodec code `0x1e` is currently listed as draft in the Multicodec table. Consumers that do not implement this code may reject or fail to interpret the CID.
+
+This is a Rust-IPFS interoperability extension, not a claim of Kubo CLI parity.
