@@ -109,14 +109,23 @@ jobs:
 
   cygwin-smoke:
     name: Run Windows executable under Cygwin
-    needs: build
     runs-on: windows-2022
     steps:
-      - name: Download Windows executable
-        uses: actions/download-artifact@v4
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          name: ipfs-x86_64-pc-windows-msvc-${{ github.sha }}
-          path: windows-dist
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cygwin smoke build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: cygwin-smoke-x86_64-pc-windows-msvc
+
+      - name: Build Windows executable for Cygwin smoke test
+        run: cargo build --release --bin ipfs --target x86_64-pc-windows-msvc
 
       - name: Install Cygwin
         uses: cygwin/cygwin-install-action@v6
@@ -129,7 +138,7 @@ jobs:
           set -euo pipefail
           WORKSPACE="$(cygpath -u "$GITHUB_WORKSPACE")"
           TEMP_DIR="$(cygpath -u "$RUNNER_TEMP")"
-          IPFS_EXE="$WORKSPACE/windows-dist/ipfs.exe"
+          IPFS_EXE="$WORKSPACE/target/x86_64-pc-windows-msvc/release/ipfs.exe"
 
           mkdir -p "$TEMP_DIR/rust-ipfs-cygwin/repo"
           printf '%s\n' 'Rust-IPFS Cygwin smoke test' > "$TEMP_DIR/rust-ipfs-cygwin/payload.txt"
