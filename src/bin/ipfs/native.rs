@@ -5,6 +5,7 @@
 
 use std::{
     fs,
+    io::Read,
     path::{Component, Path, PathBuf},
 };
 
@@ -12,6 +13,7 @@ use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand};
 use futures::StreamExt;
 use ipld_core::cid::{Cid, Version};
+use multihash::Multihash;
 use multihash_codetable::Code;
 use rust_ipfs::{
     Block, Ipfs,
@@ -33,6 +35,8 @@ struct Cli {
 enum Command {
     /// Add a file or directory to the local IPFS repository.
     Add(AddArgs),
+    /// Generate a standalone raw+BLAKE3 CID for an Iroh-compatible blob.
+    Cid(CidArgs),
 }
 
 #[derive(Debug, Args)]
@@ -93,6 +97,17 @@ struct AddArgs {
     repo: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+struct CidArgs {
+    /// File whose complete byte stream should be addressed.
+    #[arg(value_name = "FILE")]
+    file: PathBuf,
+
+    /// Use the Iroh blob identity profile: CIDv1 + raw codec + BLAKE3-256.
+    #[arg(long = "iroh-hash", required = true)]
+    iroh_hash: bool,
+}
+
 #[derive(Debug, Clone)]
 struct OutputEntry {
     cid: String,
@@ -114,7 +129,52 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Add(args) => run_add(args).await,
+        Command::Cid(args) => run_cid(args),
     }
+}
+
+const RAW_CODEC: u64 = 0x55;
+const BLAKE3_MULTIHASH_CODE: u64 = 0x1e;
+
+/// Hash a reader as one complete Iroh blob and wrap the digest in a CIDv1 raw CID.
+fn iroh_cid_from_reader<R: Read>(mut reader: R) -> anyhow::Result<Cid> {
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 64 * 1024];
+
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+
+    let digest = hasher.finalize();
+    let multihash = Multihash::<64>::wrap(BLAKE3_MULTIHASH_CODE, digest.as_bytes())
+        .map_err(|error| anyhow::anyhow!("failed to encode BLAKE3 multihash: {error}"))?;
+
+    Ok(Cid::new_v1(RAW_CODEC, multihash))
+}
+
+/// Generate an Iroh-compatible whole-file CID without starting a node or writing blocks.
+fn run_cid(args: CidArgs) -> anyhow::Result<()> {
+    if !args.iroh_hash {
+        bail!("select a CID profile with --iroh-hash");
+    }
+
+    let metadata = fs::metadata(&args.file)
+        .with_context(|| format!("cannot inspect input file {}", args.file.display()))?;
+    if !metadata.is_file() {
+        bail!("CID input must be a regular file: {}", args.file.display());
+    }
+
+    let file = fs::File::open(&args.file)
+        .with_context(|| format!("cannot open input file {}", args.file.display()))?;
+    let cid = iroh_cid_from_reader(file)
+        .with_context(|| format!("cannot hash input file {}", args.file.display()))?;
+
+    println!("{cid}");
+    Ok(())
 }
 
 async fn run_add(mut args: AddArgs) -> anyhow::Result<()> {
@@ -485,6 +545,45 @@ fn validate_virtual_path(path: &str) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn parses_iroh_hash_cid_command() {
+        let cli = Cli::try_parse_from([
+            "ipfs",
+            "cid",
+            "--iroh-hash",
+            "./asset.bin",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Cid(args) => {
+                assert!(args.iroh_hash);
+                assert_eq!(args.file, PathBuf::from("./asset.bin"));
+            }
+            Command::Add(_) => panic!("expected the cid subcommand"),
+        }
+    }
+
+    #[test]
+    fn iroh_hash_flag_is_required_for_cid_command() {
+        assert!(Cli::try_parse_from(["ipfs", "cid", "./asset.bin"]).is_err());
+    }
+
+    #[test]
+    fn iroh_empty_blob_matches_known_blake3_cid() {
+        let cid = iroh_cid_from_reader(Cursor::new([])).unwrap();
+
+        assert_eq!(
+            cid.to_string(),
+            "bafkr4ifpcne3t5pzugtkaqcn5i3nzskjtpfslsnnyejlpte2spfoihzsmi"
+        );
+        assert_eq!(cid.version(), Version::V1);
+        assert_eq!(cid.codec(), RAW_CODEC);
+        assert_eq!(cid.hash().code(), BLAKE3_MULTIHASH_CODE);
+        assert_eq!(cid.hash().digest().len(), 32);
+    }
 
     #[test]
     fn import_profile_promotes_blake3_and_raw_leaves_to_cidv1() {
