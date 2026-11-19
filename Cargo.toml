@@ -104,6 +104,7 @@ zeroize = "1.8.1"
 
 [dependencies]
 anyhow.workspace = true
+blake3 = "1.8.5"
 async-rt.workspace = true
 async-stream.workspace = true
 async-trait.workspace = true
