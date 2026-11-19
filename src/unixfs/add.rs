@@ -189,6 +189,9 @@ impl Stream for UnixfsAdd {
                         };
 
                         let mut written = 0;
+                        // Cumulative serialized size of every block in this UnixFS file DAG.
+                        // Directory links use this value as PBLink.Tsize, not the logical byte count.
+                        let mut dag_size = 0u64;
 
                         let (name, total_size, mut stream) = match option {
                             #[cfg(not(target_arch = "wasm32"))]
@@ -237,9 +240,10 @@ impl Stream for UnixfsAdd {
                             let mut total = 0;
                             while total < buffer.len() {
                                 let (blocks, consumed) = adder.push(&buffer[total..]);
-                                if !only_hash {
-                                    let mut to_put = Vec::new();
-                                    for (cid, block) in blocks {
+                                let mut to_put = Vec::new();
+                                for (cid, block) in blocks {
+                                    dag_size += block.len() as u64;
+                                    if !only_hash {
                                         match Block::new(cid, block) {
                                             Ok(block) => to_put.push(block),
                                             Err(e) => {
@@ -248,10 +252,12 @@ impl Stream for UnixfsAdd {
                                             }
                                         }
                                     }
-                                    if let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone().expect("GC guard is required when writing blocks")).await {
-                                        yield UnixfsStatus::FailedStatus { written, total_size, error: e };
-                                        return;
-                                    }
+                                }
+                                if !only_hash
+                                    && let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone().expect("GC guard is required when writing blocks")).await
+                                {
+                                    yield UnixfsStatus::FailedStatus { written, total_size, error: e };
+                                    return;
                                 }
                                 total += consumed;
                                 written += consumed;
@@ -265,6 +271,7 @@ impl Stream for UnixfsAdd {
                         let mut to_put = Vec::new();
 
                         for (cid, block) in blocks {
+                            dag_size += block.len() as u64;
                             if !only_hash {
                                 match Block::new(cid, block) {
                                     Ok(block) => to_put.push(block),
@@ -305,7 +312,7 @@ impl Stream for UnixfsAdd {
                                         opts.hasher(hasher);
 
                                         let mut tree = rust_unixfs::dir::builder::BufferingTreeBuilder::new(opts);
-                                        tree.put_link(&name, cid, written as _)?;
+                                        tree.put_link(&name, cid, dag_size)?;
 
                                         let mut iter = tree.build();
                                         let mut cids = Vec::new();
@@ -355,7 +362,7 @@ impl Stream for UnixfsAdd {
                         }
 
 
-                        yield UnixfsStatus::CompletedStatus { path, written, total_size }
+                        yield UnixfsStatus::CompletedStatus { path, written, total_size, dag_size }
                     };
 
                     self.stream = Some(stream.boxed());
