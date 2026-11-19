@@ -40,6 +40,43 @@ We recommend browsing the [examples](https://github.com/dariusc93/rust-ipfs/tree
 
 ### Native CLI
 
+#### Download a standalone executable
+
+The repository exports a ready-to-run `ipfs` executable through GitHub Actions. **Cargo and the Rust toolchain are not required on the machine running the downloaded binary.**
+
+- Every push to `libp2p-next` creates downloadable build artifacts in the [Export IPFS binaries workflow](https://github.com/Floflis/rust-ipfs/actions/workflows/export-binaries.yml). These artifacts are retained for 30 days.
+- Pushing a version tag such as `v0.16.1` builds the supported targets and publishes the packages, plus a `SHA256SUMS` file, as assets on the corresponding [GitHub Release](https://github.com/Floflis/rust-ipfs/releases).
+- The workflow can also be started manually with **Actions → Export IPFS binaries → Run workflow**.
+
+Current release targets:
+
+| Platform | Target |
+|---|---|
+| Linux x86-64 (GNU/glibc) | `x86_64-unknown-linux-gnu` |
+| Windows x86-64 | `x86_64-pc-windows-msvc` |
+| macOS Intel | `x86_64-apple-darwin` |
+| macOS Apple Silicon | `aarch64-apple-darwin` |
+
+On Linux or macOS, extract the matching `.tar.gz` asset and run:
+
+```bash
+tar -xzf ipfs-<version>-<target>.tar.gz
+chmod +x ipfs
+./ipfs --help
+./ipfs add -Q ./asset.bin
+```
+
+On Windows, extract the matching `.zip` asset and run `ipfs.exe`:
+
+```powershell
+.\\ipfs.exe --help
+.\\ipfs.exe add -Q .\\asset.bin
+```
+
+The archives contain the native executable, not a Cargo project. Linux GNU builds use the target system's compatible glibc runtime; the release does not bundle an operating system or system C runtime.
+
+The commands below using `cargo run` are for development from source. They are not required when using a downloaded release binary.
+
 The workspace now builds both the `rust-ipfs` library and a native `ipfs` executable. The first CLI surface is focused on adding local files and directories.
 
 ```bash
