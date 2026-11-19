@@ -107,9 +107,6 @@ struct AddArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(
-    after_help = "WARNING: files of 10 MB (10,000,000 bytes) or larger are currently unsupported by this command. The command rejects them before reading their contents. This is a temporary CLI policy limit, not a BLAKE3 or Iroh hashing limit."
-)]
 struct CidArgs {
     /// File whose complete byte stream should be addressed. Must be smaller than 10 MB.
     #[arg(value_name = "FILE")]
