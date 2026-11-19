@@ -6,6 +6,9 @@ on:
       - libp2p-next
     tags:
       - "v*"
+  pull_request:
+    branches:
+      - libp2p-next
   workflow_dispatch:
 
 permissions:
@@ -133,8 +136,9 @@ jobs:
           # Cygwin launches the regular Windows PE executable and translates
           # POSIX path arguments for the native process.
           REPO_WIN="$(cygpath -aw "$TEMP_DIR/rust-ipfs-cygwin/repo")"
+          INPUT_WIN="$(cygpath -aw "$TEMP_DIR/rust-ipfs-cygwin/payload.txt")"
           "$IPFS_EXE" --help
-          CID="$(IPFS_PATH="$REPO_WIN" "$IPFS_EXE" add -n -Q "$TEMP_DIR/rust-ipfs-cygwin/payload.txt")"
+          CID="$(IPFS_PATH="$REPO_WIN" "$IPFS_EXE" add -n -Q "$INPUT_WIN")"
           test -n "$CID"
           echo "Cygwin -> Windows ipfs.exe OK; hash-only CID: $CID"
 
