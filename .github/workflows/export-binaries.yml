@@ -4,8 +4,12 @@ on:
   push:
     branches:
       - libp2p-next
+      - ci/ipfs-binary-exports
     tags:
       - "v*"
+  pull_request:
+    branches:
+      - libp2p-next
   workflow_dispatch:
 
 permissions:
