@@ -596,7 +596,9 @@ mod tests {
     #[test]
     fn parses_kubo_style_combined_quiet_recursive_flags() {
         let cli = Cli::try_parse_from(["ipfs", "add", "-qr", "./site"]).unwrap();
-        let Command::Add(args) = cli.command;
+        let Command::Add(args) = cli.command else {
+            panic!("expected the add subcommand");
+        };
         assert!(args.quiet);
         assert!(args.recursive);
         assert!(!args.quieter);
@@ -605,7 +607,9 @@ mod tests {
     #[test]
     fn parses_quieter_flag_independently() {
         let cli = Cli::try_parse_from(["ipfs", "add", "-Q", "./asset.bin"]).unwrap();
-        let Command::Add(args) = cli.command;
+        let Command::Add(args) = cli.command else {
+            panic!("expected the add subcommand");
+        };
         assert!(args.quieter);
         assert!(!args.quiet);
     }
