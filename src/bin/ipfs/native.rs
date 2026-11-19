@@ -1,7 +1,7 @@
-//! Minimal native `ipfs add` CLI for the Rust-IPFS workspace.
-//!
-//! This binary intentionally starts with a focused add implementation. It is not yet a
-//! full Kubo replacement; unsupported Kubo import flags are rejected by Clap.
+// Minimal native `ipfs add` CLI for the Rust-IPFS workspace.
+ //
+ // This binary intentionally starts with a focused add implementation. It is not yet a
+ // full Kubo replacement; unsupported Kubo import flags are rejected by Clap.
 
 use std::{
     fs,
