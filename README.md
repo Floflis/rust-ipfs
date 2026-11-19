@@ -108,6 +108,7 @@ async fn hash_only(
         .add_unixfs(file)
         .cid_version(version)
         .hasher(hasher)
+        .raw_leaves(version == Version::V1)
         .only_hash();
 
     while let Some(status) = add.next().await {
