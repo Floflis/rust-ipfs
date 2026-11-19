@@ -64,6 +64,7 @@ pub struct UnixfsAdd {
     pin: bool,
     provide: bool,
     wrap: bool,
+    only_hash: bool,
     stream: Option<BoxStream<'static, UnixfsStatus>>,
 }
 
@@ -90,6 +91,7 @@ impl UnixfsAdd {
             pin: true,
             provide: false,
             wrap: false,
+            only_hash: false,
             stream: None,
         }
     }
@@ -140,6 +142,15 @@ impl UnixfsAdd {
         self.wrap = true;
         self
     }
+
+    /// Computes the UnixFS path without writing blocks to the repo, pinning them, or providing them.
+    ///
+    /// The returned path is content-addressed but is not locally available unless its blocks
+    /// are stored separately.
+    pub fn only_hash(mut self) -> Self {
+        self.only_hash = true;
+        self
+    }
 }
 
 impl Stream for UnixfsAdd {
@@ -167,9 +178,15 @@ impl Stream for UnixfsAdd {
                     let pin = self.pin;
                     let provide = self.provide;
                     let wrap = self.wrap;
+                    let only_hash = self.only_hash;
 
                     let stream = async_stream::stream! {
-                        let guard = repo.gc_guard().await;
+                        // Hash-only runs are read-only and must not hold the repo's GC lock.
+                        let guard = if only_hash {
+                            None
+                        } else {
+                            Some(repo.gc_guard().await)
+                        };
 
                         let mut written = 0;
 
@@ -220,19 +237,21 @@ impl Stream for UnixfsAdd {
                             let mut total = 0;
                             while total < buffer.len() {
                                 let (blocks, consumed) = adder.push(&buffer[total..]);
-                                let mut to_put = Vec::new();
-                                for (cid, block) in blocks {
-                                    match Block::new(cid, block) {
-                                        Ok(block) => to_put.push(block),
-                                        Err(e) => {
-                                            yield UnixfsStatus::FailedStatus { written, total_size, error: e.into() };
-                                            return;
+                                if !only_hash {
+                                    let mut to_put = Vec::new();
+                                    for (cid, block) in blocks {
+                                        match Block::new(cid, block) {
+                                            Ok(block) => to_put.push(block),
+                                            Err(e) => {
+                                                yield UnixfsStatus::FailedStatus { written, total_size, error: e.into() };
+                                                return;
+                                            }
                                         }
                                     }
-                                }
-                                if let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone()).await {
-                                    yield UnixfsStatus::FailedStatus { written, total_size, error: e };
-                                    return;
+                                    if let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone().expect("GC guard is required when writing blocks")).await {
+                                        yield UnixfsStatus::FailedStatus { written, total_size, error: e };
+                                        return;
+                                    }
                                 }
                                 total += consumed;
                                 written += consumed;
@@ -246,17 +265,21 @@ impl Stream for UnixfsAdd {
                         let mut to_put = Vec::new();
 
                         for (cid, block) in blocks {
-                            match Block::new(cid, block) {
-                                Ok(block) => to_put.push(block),
-                                Err(e) => {
-                                    yield UnixfsStatus::FailedStatus { written, total_size, error: e.into() };
-                                    return;
+                            if !only_hash {
+                                match Block::new(cid, block) {
+                                    Ok(block) => to_put.push(block),
+                                    Err(e) => {
+                                        yield UnixfsStatus::FailedStatus { written, total_size, error: e.into() };
+                                        return;
+                                    }
                                 }
                             }
                             last_cid = Some(cid);
                         }
 
-                        if let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone()).await {
+                        if !only_hash
+                            && let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone().expect("GC guard is required when writing blocks")).await
+                        {
                             yield UnixfsStatus::FailedStatus { written, total_size, error: e };
                             return;
                         }
@@ -292,11 +315,17 @@ impl Stream for UnixfsAdd {
                                             //TODO: Determine best course to prevent additional allocation
                                             let node = node?;
                                             let cid = node.cid.to_owned();
-                                            to_put.push(Block::new(cid, node.block.to_vec())?);
+                                            if !only_hash {
+                                                to_put.push(Block::new(cid, node.block.to_vec())?);
+                                            }
                                             cids.push(cid);
                                         }
 
-                                        repo.put_blocks(to_put).with_gc_guard(guard).await?;
+                                        if !only_hash {
+                                            repo.put_blocks(to_put)
+                                                .with_gc_guard(guard.expect("GC guard is required when writing blocks"))
+                                                .await?;
+                                        }
                                         let cid = cids.last().ok_or(anyhow::anyhow!("no cid available"))?;
                                         let path = IpfsPath::from(*cid).sub_path(&name)?;
 
@@ -315,11 +344,13 @@ impl Stream for UnixfsAdd {
 
                         let cid = path.root().cid().copied().expect("Cid is apart of the path");
 
-                        if pin && !repo.is_pinned(&cid).await.unwrap_or_default() && let Err(e) = repo.pin(cid).with_gc_guard(guard.clone()).recursive().await {
+                        if !only_hash && pin && !repo.is_pinned(&cid).await.unwrap_or_default() && let Err(e) = repo.pin(cid)
+                                .with_gc_guard(guard.clone().expect("GC guard is required when pinning"))
+                                .recursive().await {
                             error!("Unable to pin {cid}: {e}");
                         }
 
-                        if provide &&  let Some(ipfs) = ipfs  && let Err(e) = ipfs.provide(cid).await {
+                        if !only_hash && provide && let Some(ipfs) = ipfs && let Err(e) = ipfs.provide(cid).await {
                             error!("Unable to provide {cid}: {e}");
                         }
 
@@ -377,5 +408,60 @@ impl std::future::IntoFuture for UnixfsAdd {
 impl FusedStream for UnixfsAdd {
     fn is_terminated(&self) -> bool {
         self.stream.is_none() && self.core.is_none()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::StreamExt;
+
+    #[tokio::test]
+    async fn only_hash_returns_wrapped_path_without_writing_or_pinning_blocks() {
+        let repo = Repo::new_memory();
+        repo.init().await.unwrap();
+
+        let input = futures::stream::iter([Ok::<_, std::io::Error>(
+            Bytes::from_static(b"hash-only UnixFS content"),
+        )])
+        .boxed();
+
+        let mut add = UnixfsAdd::with_repo(
+            &repo,
+            AddOpt::Stream {
+                name: Some("sample.txt".to_owned()),
+                total: None,
+                stream: input,
+            },
+        )
+        .only_hash()
+        .wrap()
+        .pin(true)
+        .provide();
+
+        let path = loop {
+            match add.next().await.expect("add stream should produce a result") {
+                UnixfsStatus::ProgressStatus { .. } => {}
+                UnixfsStatus::CompletedStatus { path, .. } => break path,
+                UnixfsStatus::FailedStatus { error, .. } => {
+                    panic!("hash-only add failed: {error}");
+                }
+            }
+        };
+
+        let root = *path.root().cid().expect("result path should have a root CID");
+        assert!(
+            !repo.contains(root).await.unwrap(),
+            "hash-only mode must not write the root block"
+        );
+        assert!(
+            !repo.is_pinned(&root).await.unwrap(),
+            "hash-only mode must not pin the root"
+        );
+        assert!(
+            repo.list_blocks().await.collect::<Vec<_>>().await.is_empty(),
+            "hash-only mode must not write any UnixFS blocks"
+        );
     }
 }
