@@ -123,6 +123,9 @@ cargo run --bin ipfs -- add -Q -n ./asset.bin
 # Select CIDv1 with SHA2-256, or BLAKE3 (which requires CIDv1).
 cargo run --bin ipfs -- add --cid-version 1 ./asset.bin
 cargo run --bin ipfs -- add --hash blake3 ./asset.bin
+
+# Generate a whole-file CIDv1 raw+BLAKE3 identity matching an Iroh blob hash.
+cargo run --bin ipfs -- cid --iroh-hash ./asset.bin
 ```
 
 The output flags follow Kubo's `ipfs add` conventions:
@@ -135,6 +138,21 @@ The output flags follow Kubo's `ipfs add` conventions:
 - `--pin=false`: do not pin imported content.
 
 The CLI defaults to CIDv0 + SHA2-256, matching Kubo's default import profile. BLAKE3 automatically selects CIDv1. `IPFS_PATH` or `--repo` selects the repository directory; otherwise the CLI uses `~/.rust-ipfs`.
+
+#### Iroh-compatible whole-file CID
+
+`ipfs cid --iroh-hash FILE` computes BLAKE3-256 over the complete file byte stream and wraps those exact 32 digest bytes in a CIDv1 using the `raw` codec (`0x55`) and BLAKE3 multihash code (`0x1e`).
+
+This is deliberately **not UnixFS**:
+
+- no UnixFS importer, chunker, DAG, node startup, repository, block write, pin, or provider announcement is involved;
+- the file is read incrementally with a fixed-size buffer, so memory use does not grow with file size;
+- the resulting multihash digest is the same BLAKE3 content hash used as an Iroh blob identity; the CID string is a Multiformats wrapper around it, not Iroh's own hash string;
+- the command addresses the whole file as one `raw` block. It does not promise that a block larger than 2 MiB can be distributed through Bitswap, whose implementations must support blocks up to 2 MiB and are not recommended to handle larger ones.
+
+Kubo's default UnixFS chunker is `size-262144` (256 KiB). The 2 MiB figure is the Bitswap block-size interoperability ceiling, not the point at which Kubo first starts chunking. The BLAKE3 multicodec code `0x1e` is currently marked draft, so consumers must explicitly support it to decode this CID.
+
+Use `ipfs add -n` when you need the address of an IPFS UnixFS import profile; use `ipfs cid --iroh-hash` when you need the BLAKE3 identity of the file bytes themselves.
 
 #### Virtual paths
 
