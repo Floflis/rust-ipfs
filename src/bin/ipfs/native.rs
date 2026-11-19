@@ -42,6 +42,9 @@ enum Command {
     /// Add a file or directory to the local IPFS repository.
     Add(AddArgs),
     /// Generate a standalone raw+BLAKE3 CID for an Iroh-compatible blob.
+    #[command(
+        after_help = "WARNING: files of 10 MB (10,000,000 bytes) or larger are currently unsupported by this command. The command rejects them before reading their contents. This is a temporary CLI policy limit, not a BLAKE3 or Iroh hashing limit."
+    )]
     Cid(CidArgs),
 }
 
