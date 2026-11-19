@@ -1,0 +1,108 @@
+name: Export IPFS binaries
+
+on:
+  push:
+    branches:
+      - libp2p-next
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ipfs-binary-exports-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2022
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain and target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build standalone ipfs executable
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --bin ipfs --target "$TARGET"
+
+      - name: Package executable
+        id: package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+
+          # Use a readable tag/branch name while keeping the artifact unique per commit.
+          REF_NAME="${GITHUB_REF_NAME//\//-}"
+          VERSION="${REF_NAME:-${GITHUB_SHA:0:12}}"
+          PACKAGE="ipfs-${VERSION}-${TARGET}"
+          mkdir -p dist
+
+          if [[ "$TARGET" == *windows* ]]; then
+            cp "target/$TARGET/release/ipfs.exe" dist/ipfs.exe
+            powershell -NoProfile -Command "Compress-Archive -Path 'dist/ipfs.exe' -DestinationPath '$PACKAGE.zip' -Force"
+            echo "archive=$PACKAGE.zip" >> "$GITHUB_OUTPUT"
+          else
+            install -m 0755 "target/$TARGET/release/ipfs" dist/ipfs
+            tar -C dist -czf "$PACKAGE.tar.gz" ipfs
+            echo "archive=$PACKAGE.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload standalone executable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipfs-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ steps.package.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    name: Publish GitHub Release assets
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA-256 checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/*
