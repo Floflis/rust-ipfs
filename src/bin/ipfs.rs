@@ -337,7 +337,8 @@ async fn add_tree(
     let mut output = Vec::new();
 
     for (file, relative_path) in files {
-        let (cid, dag_size) = add_file(ipfs, &file, config, config.pin).await?;
+        // The final directory root owns recursive pinning; do not leave direct pins on every leaf.
+        let (cid, dag_size) = add_file(ipfs, &file, config, false).await?;
         tree.put_link(&relative_path, cid, dag_size)
             .with_context(|| format!("cannot add {} to the virtual directory tree", relative_path))?;
         output.push(OutputEntry {
