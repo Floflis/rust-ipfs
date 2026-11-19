@@ -181,7 +181,12 @@ impl Stream for UnixfsAdd {
                     let only_hash = self.only_hash;
 
                     let stream = async_stream::stream! {
-                        let guard = repo.gc_guard().await;
+                        // Hash-only runs are read-only and must not hold the repo's GC lock.
+                        let guard = if only_hash {
+                            None
+                        } else {
+                            Some(repo.gc_guard().await)
+                        };
 
                         let mut written = 0;
 
@@ -243,7 +248,7 @@ impl Stream for UnixfsAdd {
                                             }
                                         }
                                     }
-                                    if let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone()).await {
+                                    if let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone().expect("GC guard is required when writing blocks")).await {
                                         yield UnixfsStatus::FailedStatus { written, total_size, error: e };
                                         return;
                                     }
@@ -273,7 +278,7 @@ impl Stream for UnixfsAdd {
                         }
 
                         if !only_hash
-                            && let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone()).await
+                            && let Err(e) = repo.put_blocks(to_put).with_gc_guard(guard.clone().expect("GC guard is required when writing blocks")).await
                         {
                             yield UnixfsStatus::FailedStatus { written, total_size, error: e };
                             return;
@@ -317,7 +322,9 @@ impl Stream for UnixfsAdd {
                                         }
 
                                         if !only_hash {
-                                            repo.put_blocks(to_put).with_gc_guard(guard).await?;
+                                            repo.put_blocks(to_put)
+                                                .with_gc_guard(guard.expect("GC guard is required when writing blocks"))
+                                                .await?;
                                         }
                                         let cid = cids.last().ok_or(anyhow::anyhow!("no cid available"))?;
                                         let path = IpfsPath::from(*cid).sub_path(&name)?;
@@ -337,7 +344,9 @@ impl Stream for UnixfsAdd {
 
                         let cid = path.root().cid().copied().expect("Cid is apart of the path");
 
-                        if !only_hash && pin && !repo.is_pinned(&cid).await.unwrap_or_default() && let Err(e) = repo.pin(cid).with_gc_guard(guard.clone()).recursive().await {
+                        if !only_hash && pin && !repo.is_pinned(&cid).await.unwrap_or_default() && let Err(e) = repo.pin(cid)
+                                .with_gc_guard(guard.clone().expect("GC guard is required when pinning"))
+                                .recursive().await {
                             error!("Unable to pin {cid}: {e}");
                         }
 
