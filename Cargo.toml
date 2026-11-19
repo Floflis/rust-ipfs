@@ -4,6 +4,7 @@ rust-version = "1.95.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 name = "rust-ipfs"
+default-run = "ipfs"
 readme = "README.md"
 repository = "https://github.com/dariusc93/rust-ipfs"
 description = "IPFS node implementation"
@@ -109,6 +110,7 @@ async-trait.workspace = true
 asynchronous-codec.workspace = true
 base64 = { workspace = true }
 bytes = { workspace = true }
+clap.workspace = true
 chrono.workspace = true
 connexa = { workspace = true, features = ["cid"] }
 either.workspace = true
