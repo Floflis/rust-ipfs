@@ -98,7 +98,10 @@ Use the regular Windows x86-64 `.zip` package from a Cygwin terminal. This is th
 
 ```bash
 ./ipfs.exe --help
-./ipfs.exe add -n -Q ./asset.bin
+
+# Native Windows programs need Win32 paths, so translate Cygwin paths explicitly.
+export IPFS_PATH="$(cygpath -aw "$HOME/.rust-ipfs")"
+./ipfs.exe add -n -Q "$(cygpath -aw ./asset.bin)"
 ```
 
 The workflow installs Cygwin on a Windows runner and smoke-tests launching `ipfs.exe` from its Bash shell, including a hash-only file import. Cygwin-native Rust target `x86_64-pc-cygwin` is deliberately not advertised: Rust currently classifies it as Tier 3, does not ship prebuilt standard-library artifacts for it, and documents cross-compilation requirements. The Windows MSVC package is the supported route for Cygwin users.
