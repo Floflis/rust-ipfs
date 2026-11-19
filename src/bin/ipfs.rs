@@ -206,6 +206,10 @@ async fn add_inputs(
             bail!("symbolic-link inputs are not supported yet: {}", input.display());
         }
 
+        if virtual_path.is_some() && !metadata.is_file() {
+            bail!("--virtual-path requires a regular file input");
+        }
+
         let (entries, root_cid) = if metadata.is_dir() {
             if !args.recursive {
                 bail!("{} is a directory; pass -r/--recursive to add it", input.display());
@@ -349,8 +353,9 @@ async fn add_tree(
 
     let mut directory_blocks = Vec::new();
     let mut root_cid = None;
+    let mut iterator = tree.build();
 
-    while let Some(node) = tree.build().next_borrowed() {
+    while let Some(node) = iterator.next_borrowed() {
         let node = node?;
         let cid = node.cid.to_owned();
 
