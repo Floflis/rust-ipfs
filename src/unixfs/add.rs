@@ -442,20 +442,32 @@ mod tests {
                 stream: input,
             },
         )
+        .cid_version(Version::V0)
+        .raw_leaves(false)
         .only_hash()
         .wrap()
         .pin(true)
         .provide();
 
-        let path = loop {
+        let (path, written, dag_size) = loop {
             match add.next().await.expect("add stream should produce a result") {
                 UnixfsStatus::ProgressStatus { .. } => {}
-                UnixfsStatus::CompletedStatus { path, .. } => break path,
+                UnixfsStatus::CompletedStatus {
+                    path,
+                    written,
+                    dag_size,
+                    ..
+                } => break (path, written, dag_size),
                 UnixfsStatus::FailedStatus { error, .. } => {
                     panic!("hash-only add failed: {error}");
                 }
             }
         };
+
+        assert!(
+            dag_size > written as u64,
+            "CIDv0 dag-pb file blocks should make the cumulative DAG larger than the input"
+        );
 
         let root = *path.root().cid().expect("result path should have a root CID");
         assert!(
