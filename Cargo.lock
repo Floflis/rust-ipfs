@@ -5051,6 +5051,7 @@ dependencies = [
  "async-trait",
  "asynchronous-codec",
  "base64 0.23.1",
+ "blake3",
  "bytes",
  "chrono",
  "connexa",
