@@ -573,27 +573,25 @@ fn validate_virtual_path(path: &str) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::CommandFactory;
     use std::io::Cursor;
 
     #[test]
-    fn root_help_lists_all_current_cli_commands_and_size_warning() {
-        let help = Cli::command().render_long_help().to_string();
+    fn root_help_flag_lists_all_current_cli_commands_and_size_warning() {
+        let error = Cli::try_parse_from(["ipfs", "--help"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
 
+        let help = error.to_string();
         assert!(help.contains("add"));
         assert!(help.contains("cid"));
         assert!(help.contains("10 MB"));
     }
 
     #[test]
-    fn iroh_cid_help_explains_the_10_mb_limit() {
-        let mut command = Cli::command();
-        let help = command
-            .find_subcommand_mut("cid")
-            .expect("cid subcommand exists")
-            .render_long_help()
-            .to_string();
+    fn iroh_cid_help_flag_explains_the_10_mb_limit() {
+        let error = Cli::try_parse_from(["ipfs", "cid", "--help"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
 
+        let help = error.to_string();
         assert!(help.contains("--iroh-hash"));
         assert!(help.contains("10 MB"));
         assert!(help.contains("10,000,000 bytes"));
