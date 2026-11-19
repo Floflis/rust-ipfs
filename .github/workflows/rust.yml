@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "libp2p-next" ]
   pull_request:
-    branches: [ "libp2p-next", "docs/kubo-parity-roadmap" ]
+    branches: [ "libp2p-next" ]
 
 env:
   CARGO_TERM_COLOR: always
