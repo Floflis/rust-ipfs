@@ -37,6 +37,118 @@ We recommend browsing the [examples](https://github.com/dariusc93/rust-ipfs/tree
 
 **Note: Test are a WIP**
 
+
+### Native CLI
+
+The workspace now builds both the `rust-ipfs` library and a native `ipfs` executable. The first CLI surface is focused on adding local files and directories.
+
+```bash
+# Add one file to the local repository.
+cargo run --bin ipfs -- add ./asset.bin
+
+# Recursively add a directory and print one CID per imported file/directory node.
+cargo run --bin ipfs -- add -qr ./website/
+
+# Print only the final CID, without storing or pinning the imported blocks.
+cargo run --bin ipfs -- add -Q -n ./asset.bin
+
+# Select CIDv1 with SHA2-256, or BLAKE3 (which requires CIDv1).
+cargo run --bin ipfs -- add --cid-version 1 ./asset.bin
+cargo run --bin ipfs -- add --hash blake3 ./asset.bin
+```
+
+The output flags follow Kubo's `ipfs add` conventions:
+
+- `-q` / `--quiet`: print the CID for each imported file or directory node.
+- `-Q` / `--quieter`: print only the final CID.
+- `-r` / `--recursive`: traverse directory inputs recursively. `-qr` combines quiet output with recursive import.
+- `-n` / `--only-hash`: compute the UnixFS DAG without storing blocks, pinning, or providing them.
+- `-w` / `--wrap-with-directory`: wrap a file in a directory object.
+- `--pin=false`: do not pin imported content.
+
+The CLI defaults to CIDv0 + SHA2-256, matching Kubo's default import profile. BLAKE3 automatically selects CIDv1. `IPFS_PATH` or `--repo` selects the repository directory; otherwise the CLI uses `~/.rust-ipfs`.
+
+#### Virtual paths
+
+`--virtual-path` is a Rust-IPFS CLI extension. It answers a different question from hashing the file by itself: *what would the address be if this file were located at a chosen relative path inside a UnixFS directory tree?*
+
+```bash
+cargo run --bin ipfs -- add \
+  --virtual-path collection/metadata.json \
+  ./metadata.json
+```
+
+This mode implies `--only-hash`, so it does not persist blocks. Its normal output includes the computed route:
+
+```text
+added <directory-cid> /ipfs/<directory-cid>/collection/metadata.json
+```
+
+The virtual path may contain multiple directory segments. Absolute paths, `.` and `..` segments are rejected. The file bytes are hashed normally; the directory nodes are then built only in memory. This is useful for reproducible NFT metadata layouts, manifests, and release trees before committing to a final directory structure.
+
+#### Rust API: hash-only CID examples
+
+`UnixfsAdd::only_hash()` is the library API behind the CLI's `-n` mode. It does not save blocks, pin content, or announce providers. The returned path is content-addressed, but it is not locally retrievable unless its blocks are stored separately.
+
+```rust
+use std::path::Path;
+
+use futures::StreamExt;
+use ipld_core::cid::Version;
+use multihash_codetable::Code;
+use rust_ipfs::{Ipfs, unixfs::UnixfsStatus};
+
+async fn hash_only(
+    ipfs: &Ipfs,
+    file: &Path,
+    version: Version,
+    hasher: Code,
+) -> anyhow::Result<String> {
+    let mut add = ipfs
+        .add_unixfs(file)
+        .cid_version(version)
+        .hasher(hasher)
+        .raw_leaves(version == Version::V1)
+        .only_hash();
+
+    while let Some(status) = add.next().await {
+        match status {
+            UnixfsStatus::ProgressStatus { .. } => {}
+            UnixfsStatus::FailedStatus { error, .. } => return Err(error.into()),
+            UnixfsStatus::CompletedStatus { path, .. } => return Ok(path.to_string()),
+        }
+    }
+
+    anyhow::bail!("UnixFS add ended without a completion event")
+}
+
+// CIDv0 requires SHA2-256.
+let cidv0 = hash_only(
+    &ipfs,
+    Path::new("./asset.bin"),
+    Version::V0,
+    Code::Sha2_256,
+).await?;
+
+// CIDv1 with SHA2-256.
+let cidv1 = hash_only(
+    &ipfs,
+    Path::new("./asset.bin"),
+    Version::V1,
+    Code::Sha2_256,
+).await?;
+
+// CIDv1 with BLAKE3.
+let blake3 = hash_only(
+    &ipfs,
+    Path::new("./asset.bin"),
+    Version::V1,
+    Code::Blake3_256,
+).await?;
+```
+
+The initial CLI intentionally implements a subset of Kubo's `add` surface: local regular files/directories, CID version, SHA2-256/BLAKE3, quiet/quieter output, recursion, hash-only mode, wrapping, and pin control. Stdin, symlink dereferencing, ignore rules, progress bars, and advanced UnixFS import settings are not implemented yet.
+
 ### Running the tests
 
 

@@ -197,6 +197,8 @@ pub enum UnixfsStatus {
         path: IpfsPath,
         written: usize,
         total_size: Option<usize>,
+        /// Cumulative serialized size of the UnixFS file DAG, suitable for PBLink.Tsize.
+        dag_size: u64,
     },
     FailedStatus {
         written: usize,
