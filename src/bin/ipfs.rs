@@ -145,15 +145,7 @@ async fn run_add(mut args: AddArgs) -> anyhow::Result<()> {
         other => bail!("unsupported hash function: {other}"),
     };
 
-    let requested_version = args.cid_version.unwrap_or(0);
-    let cid_version = if hasher != Code::Sha2_256 && requested_version == 0 {
-        // Kubo promotes non-SHA2-256 hashes to CIDv1.
-        Version::V1
-    } else if requested_version == 0 {
-        Version::V0
-    } else {
-        Version::V1
-    };
+    let cid_version = resolve_cid_version(args.cid_version, hasher, args.raw_leaves);
 
     let config = ImportConfig {
         cid_version,
@@ -453,6 +445,18 @@ fn relative_unixfs_path(root: &Path, path: &Path) -> anyhow::Result<String> {
     Ok(segments.join("/"))
 }
 
+fn resolve_cid_version(requested: Option<u8>, hasher: Code, raw_leaves: bool) -> Version {
+    let requested = requested.unwrap_or(0);
+    if requested == 0 && (hasher != Code::Sha2_256 || raw_leaves) {
+        // CIDv0 only supports SHA2-256 and cannot use raw leaves.
+        Version::V1
+    } else if requested == 0 {
+        Version::V0
+    } else {
+        Version::V1
+    }
+}
+
 fn validate_virtual_path(path: &str) -> anyhow::Result<String> {
     let parsed = Path::new(path);
     if parsed.as_os_str().is_empty() || parsed.is_absolute() {
@@ -481,6 +485,14 @@ fn validate_virtual_path(path: &str) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_profile_promotes_blake3_and_raw_leaves_to_cidv1() {
+        assert_eq!(resolve_cid_version(None, Code::Sha2_256, false), Version::V0);
+        assert_eq!(resolve_cid_version(None, Code::Blake3_256, false), Version::V1);
+        assert_eq!(resolve_cid_version(Some(0), Code::Sha2_256, true), Version::V1);
+        assert_eq!(resolve_cid_version(Some(1), Code::Sha2_256, false), Version::V1);
+    }
 
     #[test]
     fn parses_kubo_style_combined_quiet_recursive_flags() {
