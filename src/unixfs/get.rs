@@ -150,6 +150,7 @@ impl Stream for UnixfsGet {
                         let file = created.1;
                         let mut file = BufWriter::new(file);
 
+                        let mut dag_size = block.data().len() as u64;
                         let cid = block.cid();
                         let root_name = block.cid().to_string();
 
@@ -178,6 +179,7 @@ impl Stream for UnixfsGet {
                                 }
                             };
                             let block_data = block.data();
+                            dag_size += block_data.len() as u64;
 
                             match walker.next(block_data, &mut cache) {
                                 Ok(ContinuedWalk::Bucket(..)) => {}
@@ -232,7 +234,7 @@ impl Stream for UnixfsGet {
                             return;
                         }
 
-                        yield UnixfsStatus::CompletedStatus { path, written, total_size }
+                        yield UnixfsStatus::CompletedStatus { path, written, total_size, dag_size }
                     };
 
                     #[cfg(target_arch = "wasm32")]
