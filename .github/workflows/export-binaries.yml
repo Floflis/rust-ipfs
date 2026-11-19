@@ -31,6 +31,8 @@ jobs:
             runner: macos-latest
           - target: aarch64-apple-darwin
             runner: macos-latest
+          - target: aarch64-linux-android
+            runner: ubuntu-24.04
 
     steps:
       - name: Check out source
@@ -40,6 +42,23 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install Android NDK
+        if: matrix.target == 'aarch64-linux-android'
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27d
+
+      - name: Configure Android API 21 linker
+        if: matrix.target == 'aarch64-linux-android'
+        shell: bash
+        run: |
+          NDK_BIN="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "$NDK_BIN" >> "$GITHUB_PATH"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK_BIN/aarch64-linux-android21-clang" >> "$GITHUB_ENV"
+          echo "CC_aarch64_linux_android=$NDK_BIN/aarch64-linux-android21-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$NDK_BIN/llvm-ar" >> "$GITHUB_ENV"
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
@@ -84,10 +103,45 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  cygwin-smoke:
+    name: Run Windows executable under Cygwin
+    needs: build
+    runs-on: windows-2022
+    steps:
+      - name: Download Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: ipfs-x86_64-pc-windows-msvc-${{ github.sha }}
+          path: windows-dist
+
+      - name: Install Cygwin
+        uses: cygwin/cygwin-install-action@v6
+        with:
+          install-dir: C:\\tools\\cygwin
+
+      - name: Smoke test from Cygwin Bash
+        shell: C:\\tools\\cygwin\\bin\\bash.exe --login -o igncr -eo pipefail '{0}'
+        run: |
+          set -euo pipefail
+          WORKSPACE="$(cygpath -u "$GITHUB_WORKSPACE")"
+          TEMP_DIR="$(cygpath -u "$RUNNER_TEMP")"
+          IPFS_EXE="$WORKSPACE/windows-dist/ipfs.exe"
+
+          mkdir -p "$TEMP_DIR/rust-ipfs-cygwin/repo"
+          printf 'Rust-IPFS Cygwin smoke test\\n' > "$TEMP_DIR/rust-ipfs-cygwin/payload.txt"
+
+          # Cygwin launches the regular Windows PE executable and translates
+          # POSIX path arguments for the native process.
+          REPO_WIN="$(cygpath -aw "$TEMP_DIR/rust-ipfs-cygwin/repo")"
+          "$IPFS_EXE" --help
+          CID="$(IPFS_PATH="$REPO_WIN" "$IPFS_EXE" add -n -Q "$TEMP_DIR/rust-ipfs-cygwin/payload.txt")"
+          test -n "$CID"
+          echo "Cygwin -> Windows ipfs.exe OK; hash-only CID: $CID"
+
   publish-release:
     name: Publish GitHub Release assets
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, cygwin-smoke]
     runs-on: ubuntu-latest
     steps:
       - name: Download all platform packages
