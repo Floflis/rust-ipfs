@@ -56,6 +56,7 @@ Current release targets:
 | Windows x86-64 | `x86_64-pc-windows-msvc` |
 | macOS Intel | `x86_64-apple-darwin` |
 | macOS Apple Silicon | `aarch64-apple-darwin` |
+| Android ARM64 (Termux, API 21+) | `aarch64-linux-android` |
 
 On Linux or macOS, extract the matching `.tar.gz` asset and run:
 
@@ -74,6 +75,33 @@ On Windows, extract the matching `.zip` asset and run `ipfs.exe`:
 ```
 
 The archives contain the native executable, not a Cargo project. Linux GNU builds use the target system's compatible glibc runtime; the release does not bundle an operating system or system C runtime.
+
+#### Termux on Android ARM64
+
+The Android package is cross-compiled for `aarch64-linux-android` with Android API 21 as its minimum native API level. It is intended for 64-bit ARM Termux installations. No Rust toolchain or Cargo installation is needed on the phone.
+
+After downloading the `aarch64-linux-android` release asset in Termux, extract it and install the executable inside Termux's own prefix:
+
+```bash
+tar -xzf ipfs-<version>-aarch64-linux-android.tar.gz
+mkdir -p "$PREFIX/bin"
+install -m 0755 ipfs "$PREFIX/bin/rust-ipfs"
+rust-ipfs --help
+rust-ipfs add -Q ./asset.bin
+```
+
+Use Termux's private filesystem under `$HOME` or `$PREFIX` for the executable and repository. The cross-build verifies Android linking, but a release should still be smoke-tested on a real Termux device before claiming device-level certification.
+
+#### Cygwin on 64-bit Windows
+
+Use the regular Windows x86-64 `.zip` package from a Cygwin terminal. This is the native Windows MSVC executable (`ipfs.exe`) launched from Cygwin, not a binary linked against `cygwin1.dll`:
+
+```bash
+./ipfs.exe --help
+./ipfs.exe add -n -Q ./asset.bin
+```
+
+The workflow installs Cygwin on a Windows runner and smoke-tests launching `ipfs.exe` from its Bash shell, including a hash-only file import. Cygwin-native Rust target `x86_64-pc-cygwin` is deliberately not advertised: Rust currently classifies it as Tier 3, does not ship prebuilt standard-library artifacts for it, and documents cross-compilation requirements. The Windows MSVC package is the supported route for Cygwin users.
 
 The commands below using `cargo run` are for development from source. They are not required when using a downloaded release binary.
 
