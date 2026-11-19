@@ -25,7 +25,13 @@ use rust_ipfs::{
 };
 
 #[derive(Debug, Parser)]
-#[command(name = "ipfs", version, about = "Rust-IPFS command-line interface")]
+#[command(
+    name = "ipfs",
+    version,
+    about = "Rust-IPFS command-line interface",
+    long_about = "Rust-IPFS native command-line interface.\n\nAvailable commands:\n  add  Import files and directories using the UnixFS content-addressing profile.\n  cid  Generate a standalone whole-file CID using an explicit hash profile.\n\nRun 'ipfs <COMMAND> --help' for command-specific options.",
+    after_help = "WARNING: 'cid --iroh-hash' currently rejects files of 10 MB (10,000,000 bytes) or larger. This is a temporary CLI policy limit, not a BLAKE3 algorithm limit."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -36,6 +42,9 @@ enum Command {
     /// Add a file or directory to the local IPFS repository.
     Add(AddArgs),
     /// Generate a standalone raw+BLAKE3 CID for an Iroh-compatible blob.
+    #[command(
+        after_help = "WARNING: files of 10 MB (10,000,000 bytes) or larger are currently unsupported by this command. The command rejects them before reading their contents. This is a temporary CLI policy limit, not a BLAKE3 or Iroh hashing limit."
+    )]
     Cid(CidArgs),
 }
 
@@ -99,12 +108,16 @@ struct AddArgs {
 
 #[derive(Debug, Args)]
 struct CidArgs {
-    /// File whose complete byte stream should be addressed.
+    /// File whose complete byte stream should be addressed. Must be smaller than 10 MB.
     #[arg(value_name = "FILE")]
     file: PathBuf,
 
     /// Use the Iroh blob identity profile: CIDv1 + raw codec + BLAKE3-256.
-    #[arg(long = "iroh-hash", required = true)]
+    #[arg(
+        long = "iroh-hash",
+        required = true,
+        help = "Generate CIDv1 raw+BLAKE3. Files >= 10 MB (10,000,000 bytes) are rejected."
+    )]
     iroh_hash: bool,
 }
 
@@ -135,6 +148,19 @@ async fn main() -> anyhow::Result<()> {
 
 const RAW_CODEC: u64 = 0x55;
 const BLAKE3_MULTIHASH_CODE: u64 = 0x1e;
+// Temporary CLI policy: keep whole-file raw blocks below the 10 MB threshold.
+const MAX_IROH_CID_FILE_SIZE: u64 = 10_000_000;
+
+/// Reject files at or above the current whole-file CID command size limit.
+fn validate_iroh_cid_file_size(size: u64) -> anyhow::Result<()> {
+    if size >= MAX_IROH_CID_FILE_SIZE {
+        bail!(
+            "files of 10 MB (10,000,000 bytes) or larger are currently unsupported by `cid --iroh-hash` (file size: {size} bytes); this is a temporary CLI policy limit"
+        );
+    }
+
+    Ok(())
+}
 
 /// Hash a reader as one complete Iroh blob and wrap the digest in a CIDv1 raw CID.
 fn iroh_cid_from_reader<R: Read>(mut reader: R) -> anyhow::Result<Cid> {
@@ -167,6 +193,8 @@ fn run_cid(args: CidArgs) -> anyhow::Result<()> {
     if !metadata.is_file() {
         bail!("CID input must be a regular file: {}", args.file.display());
     }
+    validate_iroh_cid_file_size(metadata.len())
+        .with_context(|| format!("cannot hash input file {}", args.file.display()))?;
 
     let file = fs::File::open(&args.file)
         .with_context(|| format!("cannot open input file {}", args.file.display()))?;
@@ -548,6 +576,28 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    fn root_help_flag_lists_all_current_cli_commands_and_size_warning() {
+        let error = Cli::try_parse_from(["ipfs", "--help"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
+
+        let help = error.to_string();
+        assert!(help.contains("add"));
+        assert!(help.contains("cid"));
+        assert!(help.contains("10 MB"));
+    }
+
+    #[test]
+    fn iroh_cid_help_flag_explains_the_10_mb_limit() {
+        let error = Cli::try_parse_from(["ipfs", "cid", "--help"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
+
+        let help = error.to_string();
+        assert!(help.contains("--iroh-hash"));
+        assert!(help.contains("10 MB"));
+        assert!(help.contains("10,000,000 bytes"));
+    }
+
+    #[test]
     fn parses_iroh_hash_cid_command() {
         let cli = Cli::try_parse_from([
             "ipfs",
@@ -569,6 +619,18 @@ mod tests {
     #[test]
     fn iroh_hash_flag_is_required_for_cid_command() {
         assert!(Cli::try_parse_from(["ipfs", "cid", "./asset.bin"]).is_err());
+    }
+
+    #[test]
+    fn iroh_cid_size_limit_accepts_files_below_10_mb() {
+        assert!(validate_iroh_cid_file_size(0).is_ok());
+        assert!(validate_iroh_cid_file_size(MAX_IROH_CID_FILE_SIZE - 1).is_ok());
+    }
+
+    #[test]
+    fn iroh_cid_size_limit_rejects_files_at_or_above_10_mb() {
+        assert!(validate_iroh_cid_file_size(MAX_IROH_CID_FILE_SIZE).is_err());
+        assert!(validate_iroh_cid_file_size(MAX_IROH_CID_FILE_SIZE + 1).is_err());
     }
 
     #[test]

@@ -64,6 +64,8 @@ On Linux or macOS, extract the matching `.tar.gz` asset and run:
 tar -xzf ipfs-<version>-<target>.tar.gz
 chmod +x ipfs
 ./ipfs --help
+./ipfs add --help
+./ipfs cid --help
 ./ipfs add -Q ./asset.bin
 ```
 
@@ -142,6 +144,8 @@ The CLI defaults to CIDv0 + SHA2-256, matching Kubo's default import profile. BL
 #### Iroh-compatible whole-file CID
 
 `ipfs cid --iroh-hash FILE` computes BLAKE3-256 over the complete file byte stream and wraps those exact 32 digest bytes in a CIDv1 using the `raw` codec (`0x55`) and BLAKE3 multihash code (`0x1e`).
+
+**Current CLI limit:** files of 10 MB (10,000,000 bytes) or larger are rejected before hashing. This is a temporary policy limit for this command, not a BLAKE3 or Iroh algorithm limit. The same warning appears in `ipfs --help` and `ipfs cid --help`.
 
 This is deliberately **not UnixFS**:
 
