@@ -476,3 +476,39 @@ fn validate_virtual_path(path: &str) -> anyhow::Result<String> {
 
     Ok(segments.join("/"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_kubo_style_combined_quiet_recursive_flags() {
+        let cli = Cli::try_parse_from(["ipfs", "add", "-qr", "./site"]).unwrap();
+        let Command::Add(args) = cli.command;
+        assert!(args.quiet);
+        assert!(args.recursive);
+        assert!(!args.quieter);
+    }
+
+    #[test]
+    fn parses_quieter_flag_independently() {
+        let cli = Cli::try_parse_from(["ipfs", "add", "-Q", "./asset.bin"]).unwrap();
+        let Command::Add(args) = cli.command;
+        assert!(args.quieter);
+        assert!(!args.quiet);
+    }
+
+    #[test]
+    fn virtual_paths_keep_nested_segments() {
+        assert_eq!(
+            validate_virtual_path("collection/metadata.json").unwrap(),
+            "collection/metadata.json"
+        );
+    }
+
+    #[test]
+    fn virtual_paths_reject_parent_traversal() {
+        assert!(validate_virtual_path("../metadata.json").is_err());
+        assert!(validate_virtual_path("/collection/metadata.json").is_err());
+    }
+}
