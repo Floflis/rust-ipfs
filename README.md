@@ -56,7 +56,7 @@ Current release targets:
 | Windows x86-64 | `x86_64-pc-windows-msvc` |
 | macOS Intel | `x86_64-apple-darwin` |
 | macOS Apple Silicon | `aarch64-apple-darwin` |
-| Android ARM64 (Termux, API 21+) | `aarch64-linux-android` |
+| Android ARM64 (Termux, API 24+) | `aarch64-linux-android` |
 
 On Linux or macOS, extract the matching `.tar.gz` asset and run:
 
@@ -78,7 +78,7 @@ The archives contain the native executable, not a Cargo project. Linux GNU build
 
 #### Termux on Android ARM64
 
-The Android package is cross-compiled for `aarch64-linux-android` with Android API 21 as its minimum native API level. It is intended for 64-bit ARM Termux installations. No Rust toolchain or Cargo installation is needed on the phone.
+The Android package is cross-compiled for `aarch64-linux-android` with Android API 24 as its minimum native API level. API 24 is required by the current `if-addrs` dependency's use of `getifaddrs`/`freeifaddrs` on Android. It is intended for 64-bit ARM Termux installations. No Rust toolchain or Cargo installation is needed on the phone.
 
 After downloading the `aarch64-linux-android` release asset in Termux, extract it and install the executable inside Termux's own prefix:
 
