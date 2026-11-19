@@ -143,8 +143,8 @@ jobs:
           mkdir -p "$TEMP_DIR/rust-ipfs-cygwin/repo"
           printf '%s\n' 'Rust-IPFS Cygwin smoke test' > "$TEMP_DIR/rust-ipfs-cygwin/payload.txt"
 
-          # Cygwin launches the regular Windows PE executable and translates
-          # POSIX path arguments for the native process.
+          # Cygwin launches the regular Windows PE executable. Convert POSIX paths
+          # explicitly because the native Windows process expects Win32 paths.
           REPO_WIN="$(cygpath -aw "$TEMP_DIR/rust-ipfs-cygwin/repo")"
           INPUT_WIN="$(cygpath -aw "$TEMP_DIR/rust-ipfs-cygwin/payload.txt")"
           "$IPFS_EXE" --help
