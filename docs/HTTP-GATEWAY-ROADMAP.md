@@ -390,21 +390,23 @@ Kubo's documented local defaults distinguish `127.0.0.1:8080` for path-style ret
 
 ## 12. Implementation progress
 
-The first implementation slice is now present on the working PR branch:
+The opt-in native http-gateway feature now provides an Axum listener on loopback port 8080, with Path Gateway and CIDv1 Subdomain Gateway request routing.
 
-- An opt-in native `http-gateway` Cargo feature, independent from the existing outbound `gateway` feature.
-- A public `http_gateway` module behind that feature.
-- An Axum-based HTTP listener with a caller-supplied listener API and a loopback default at `127.0.0.1:8080`.
-- Initial `GET` and `HEAD` handling for `/ipfs/{cid}/{path}`.
-- UnixFS file bytes are forwarded through the existing `UnixfsCat` stream rather than collected into a whole-file buffer.
+Implemented in the current branch:
 
-This is an early vertical slice, not yet a Kubo-compatible release. Current limitations include:
+- GET and HEAD for /ipfs/{cid}[/{path}].
+- CIDv1 subdomain addressing at <cidv1>.ipfs.localhost, with optional Host port parsing and rejection of unconfigured hosts.
+- Percent-decoding of path segments, rejecting malformed escapes, encoded separators, backslashes, NUL bytes, and dot segments.
+- UnixFS directory detection through the existing shallow listing API.
+- index.html fallback for directories and permanent slash redirects for directory URLs.
+- A deliberate no-index policy: directories without index.html return 404; no generated directory listing is exposed.
+- MIME types for common web, image, font, media, and document extensions, with application/octet-stream as the fallback.
+- Single byte ranges, including closed, open-ended, and suffix forms. Unsatisfiable and multiple-range requests return 416.
+- A public UnixfsCat range adapter that applies the interval during UnixFS traversal so unrelated file blocks can be skipped.
+- Local UnixFS-backed tests for index serving, MIME, byte-range delivery, and CID subdomain serving.
 
-- No directory resolution or `index.html` fallback.
-- No content-type detection; successful file responses currently use `application/octet-stream`.
-- No byte-range support, conditional requests, or subdomain routing.
-- No explicit graceful-shutdown signal API yet.
-- Streaming retrieval errors can occur after the HTTP response has started, so complete HTTP error mapping still needs a resolver/preflight design.
-- The implementation has not yet been compiled or tested in this editing environment. The dependency lockfile and CI validation must be checked before treating the slice as build-verified.
+The feature-specific Rust workflow now runs cargo check with http-gateway enabled and the matching gateway tests. It also uploads the resolved Cargo.lock as an artifact so the lockfile can be committed from the exact dependency resolution used by CI.
 
-Continue implementation on this same PR branch. The next step is to make the first file-serving path compile and pass integration tests, then add directory/index and MIME behavior before expanding the protocol surface.
+This is not yet a claim of full Kubo compatibility. Conditional requests, ETag/If-Range, trustless/CAR responses, IPNS subdomains, configurable gateway domains, daemon/CLI integration, explicit graceful shutdown, and the gateway conformance suite remain outstanding. Stream failures that happen after response headers are sent still terminate the body rather than becoming a new HTTP status.
+
+Do not mark this implementation release-ready until the feature-specific CI checks pass and the generated Cargo.lock has been committed.
