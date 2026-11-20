@@ -3,7 +3,7 @@
 > **Status:** Research and architecture proposal. No Iroh bridge implementation is included in this change.
 >
 > **Research snapshot:** 2026-11-19  
-> **Repository baseline:** \`libp2p-next\` at \`a08b2b1a869b059ed1ee618d8e9773d8f15897da\`
+> **Repository baseline:** `libp2p-next` at `a08b2b1a869b059ed1ee618d8e9773d8f15897da`
 
 ## 1. Executive summary
 
@@ -105,9 +105,9 @@ The experiment's README describes depth-first, pre-order, left-to-right traversa
 
 ### 4.2 Why the experiment must not be copied as-is
 
-The N0 repository explicitly describes itself as experimental, low-level, and unpolished. Its current \`iroh-dag-sync\` manifest also pins pre-GA Iroh dependencies, including \`iroh = 1.0.0-rc.1\` and \`iroh-blobs = 0.102\`. Iroh 1.0 has since been released, so dependency and API compatibility must be audited before any port.
+The N0 repository explicitly describes itself as experimental, low-level, and unpolished. Its current `iroh-dag-sync` manifest also pins pre-GA Iroh dependencies, including `iroh = 1.0.0-rc.1` and `iroh-blobs = 0.102`. Iroh 1.0 has since been released, so dependency and API compatibility must be audited before any port.
 
-There is a more important correctness issue for UnixFS: the current experiment's CAR import path and link-cache insertion call \`DagCborCodec::links\` for blocks without dispatching on the block's actual codec. That is not a correct general-purpose UnixFS traversal. A UnixFS CAR normally contains DAG-PB nodes and raw leaves, not exclusively DAG-CBOR nodes.
+There is a more important correctness issue for UnixFS: the current experiment's CAR import path and link-cache insertion call `DagCborCodec::links` for blocks without dispatching on the block's actual codec. That is not a correct general-purpose UnixFS traversal. A UnixFS CAR normally contains DAG-PB nodes and raw leaves, not exclusively DAG-CBOR nodes.
 
 Rust-IPFS already has codec-aware block decoding. The bridge should build on that implementation rather than copy the prototype's DAG-CBOR-only extraction path.
 
@@ -123,11 +123,11 @@ Relevant source:
 
 The inspected Rust-IPFS baseline already contains building blocks that should be reused:
 
-- \`src/block.rs\` defines the block abstraction and codec-aware decoding for Raw, DAG-CBOR, DAG-JSON, and DAG-PB blocks.
-- \`Block::to_ipld()\` decodes according to the CID codec.
-- \`Block::references()\` extracts IPLD references from the decoded block.
-- The UnixFS implementation has its own traversal and file reconstruction logic under \`unixfs/\`.
-- CAR functionality is exposed under \`src/dag/car.rs\`.
+- `src/block.rs` defines the block abstraction and codec-aware decoding for Raw, DAG-CBOR, DAG-JSON, and DAG-PB blocks.
+- `Block::to_ipld()` decodes according to the CID codec.
+- `Block::references()` extracts IPLD references from the decoded block.
+- The UnixFS implementation has its own traversal and file reconstruction logic under `unixfs/`.
+- CAR functionality is exposed under `src/dag/car.rs`.
 
 The bridge should use the generic block/DAG abstraction to move complete DAGs, and the UnixFS-aware traversal when file- or directory-specific semantics are needed. These are related layers, not interchangeable ones.
 
@@ -224,17 +224,17 @@ The native Iroh sync path should be DAG-aware rather than treating a CAR as one 
 
 ### 7.1 Do not confuse a raw file CID with a UnixFS root CID
 
-Rust-IPFS currently documents \`ipfs cid --iroh-hash FILE\` as BLAKE3-256 over the complete file byte stream, wrapped in a CIDv1 using the Raw codec.
+Rust-IPFS currently documents `ipfs cid --iroh-hash FILE` as BLAKE3-256 over the complete file byte stream, wrapped in a CIDv1 using the Raw codec.
 
 That operation is deliberately not UnixFS: it does not chunk the file, build a DAG, or create a directory/file root node. It produces one raw whole-file identity.
 
 For the bridge, BLAKE3 should instead be computed independently for each serialized DAG block. The original UnixFS root CID must remain the root used by IPFS.
 
-The existing 10,000,000-byte rejection policy belongs to the standalone \`cid --iroh-hash\` command. It is not a BLAKE3 or Iroh limitation and must not be copied into the DAG mediator. The mediator transfers individual UnixFS blocks, not the entire file as one raw block.
+The existing 10,000,000-byte rejection policy belongs to the standalone `cid --iroh-hash` command. It is not a BLAKE3 or Iroh limitation and must not be copied into the DAG mediator. The mediator transfers individual UnixFS blocks, not the entire file as one raw block.
 
 ### 7.2 IPIP-0499 must guide UnixFS CID profiles
 
-IPIP-0499 defines named UnixFS import profiles to make CID generation deterministic across implementations. Its modern \`unixfs-v1-2025\` profile specifies:
+IPIP-0499 defines named UnixFS import profiles to make CID generation deterministic across implementations. Its modern `unixfs-v1-2025` profile specifies:
 
 - CIDv1;
 - SHA2-256;
@@ -248,7 +248,7 @@ It does **not** define BLAKE3 as the hash function for that profile.
 
 Therefore:
 
-- Keep the canonical \`unixfs-v1-2025\` profile aligned with IPIP-0499.
+- Keep the canonical `unixfs-v1-2025` profile aligned with IPIP-0499.
 - Do not describe a BLAKE3 UnixFS profile as IPIP-0499-compliant.
 - If Rust-IPFS offers UnixFS DAGs hashed with BLAKE3, label the profile custom/experimental and document all import parameters.
 - Do not invent or publish a new public CID convention without checking existing multicodec and IPIP work.
@@ -275,13 +275,13 @@ Source:
 
 Iroh is primarily a Rust library plus separately maintained protocols. The upstream Iroh CLI was removed in the v0.28.1 release line; the Iroh roadmap directs users toward protocol-specific tools rather than a universal Iroh node CLI.
 
-Consequently, a command such as \`ipfs iroh send\` cannot safely assume that an upstream generic \`iroh\` executable exists or understands Rust-IPFS DAG requests.
+Consequently, a command such as `ipfs iroh send` cannot safely assume that an upstream generic `iroh` executable exists or understands Rust-IPFS DAG requests.
 
 Recommended options:
 
 1. **Built-in library integration:** an optional Rust-IPFS feature uses Iroh crates directly and exposes IPFS-native commands.
-2. **Companion helper process:** a separately built \`rust-ipfs-iroh\` executable owns the Iroh endpoint and custom protocol. The main \`ipfs\` CLI invokes it through a documented, versioned process interface.
-3. **Archive fallback:** an optional \`sendme\`-style path transfers a CAR as a file when DAG-aware sync is not required.
+2. **Companion helper process:** a separately built `rust-ipfs-iroh` executable owns the Iroh endpoint and custom protocol. The main `ipfs` CLI invokes it through a documented, versioned process interface.
+3. **Archive fallback:** an optional `sendme`-style path transfers a CAR as a file when DAG-aware sync is not required.
 
 The companion helper is the cleanest fit if the CLI must keep Iroh in an external process while Rust-IPFS owns the mediator and user-facing command abstraction. Its process interface should be treated as a real protocol: version it, validate input/output, propagate exit codes, and test missing-helper and incompatible-version failures.
 
