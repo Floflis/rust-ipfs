@@ -222,7 +222,13 @@ fn parse_request_path(
             return build_ipfs_path(parsed, &raw_path, trailing_slash);
         }
         GatewayHost::Subdomain(cid) => {
-            let raw = uri_path.strip_prefix('/').unwrap_or(uri_path);
+            // The origin root is a directory URL, even though trimming its
+            // leading slash would otherwise turn it into an empty string.
+            let raw = if uri_path == "/" {
+                "/"
+            } else {
+                uri_path.strip_prefix('/').unwrap_or(uri_path)
+            };
             (cid, raw.to_owned())
         }
     };
