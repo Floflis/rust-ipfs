@@ -403,7 +403,7 @@ Implemented in the current branch:
 - MIME types for common web, image, font, media, and document extensions, with application/octet-stream as the fallback.
 - Single byte ranges, including closed, open-ended, and suffix forms. Unsatisfiable and multiple-range requests return 416.
 - A public UnixfsCat range adapter that applies the interval during UnixFS traversal so unrelated file blocks can be skipped.
-- Local UnixFS-backed tests for index serving, MIME, byte-range delivery, and CID subdomain serving.
+- Local UnixFS-backed tests for index serving, MIME, byte-range delivery, and CID subdomain serving, including a raw TCP test through the actual HTTP listener.
 
 The feature-specific Rust workflow now runs cargo check with http-gateway enabled and the matching gateway tests. It also uploads the resolved Cargo.lock as an artifact so the lockfile can be committed from the exact dependency resolution used by CI.
 
