@@ -208,7 +208,9 @@ fn parse_host(request: &Request<Body>) -> Result<GatewayHost, ()> {
     }
 
     let cid = Cid::from_str(label).map_err(|_| ())?;
-    if cid.version() != Version::V1 {
+    // DNS subdomains use the canonical lower-case base32 CIDv1 label. Parsing
+    // other multibase spellings would accept hostnames outside that format.
+    if cid.version() != Version::V1 || cid.to_string() != label {
         return Err(());
     }
 
