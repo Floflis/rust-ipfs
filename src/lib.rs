@@ -34,6 +34,8 @@ pub mod dag;
 pub mod error;
 #[cfg(feature = "gateway")]
 mod gateway;
+#[cfg(all(feature = "http-gateway", not(target_arch = "wasm32")))]
+pub mod http_gateway;
 pub mod ipns;
 pub mod mfs;
 pub mod p2p;
