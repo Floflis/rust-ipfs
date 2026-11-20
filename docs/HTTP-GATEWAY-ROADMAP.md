@@ -386,3 +386,25 @@ Kubo's documented local defaults distinguish `127.0.0.1:8080` for path-style ret
 - No claim is made that the current outbound `gateway` feature serves inbound HTTP requests.
 - No claim is made that all content is prefetched or available offline after one page load.
 - No claim of full Kubo Gateway conformance is made before running the conformance tests.
+
+
+## 12. Implementation progress
+
+The first implementation slice is now present on the working PR branch:
+
+- An opt-in native `http-gateway` Cargo feature, independent from the existing outbound `gateway` feature.
+- A public `http_gateway` module behind that feature.
+- An Axum-based HTTP listener with a caller-supplied listener API and a loopback default at `127.0.0.1:8080`.
+- Initial `GET` and `HEAD` handling for `/ipfs/{cid}/{path}`.
+- UnixFS file bytes are forwarded through the existing `UnixfsCat` stream rather than collected into a whole-file buffer.
+
+This is an early vertical slice, not yet a Kubo-compatible release. Current limitations include:
+
+- No directory resolution or `index.html` fallback.
+- No content-type detection; successful file responses currently use `application/octet-stream`.
+- No byte-range support, conditional requests, or subdomain routing.
+- No explicit graceful-shutdown signal API yet.
+- Streaming retrieval errors can occur after the HTTP response has started, so complete HTTP error mapping still needs a resolver/preflight design.
+- The implementation has not yet been compiled or tested in this editing environment. The dependency lockfile and CI validation must be checked before treating the slice as build-verified.
+
+Continue implementation on this same PR branch. The next step is to make the first file-serving path compile and pass integration tests, then add directory/index and MIME behavior before expanding the protocol surface.
