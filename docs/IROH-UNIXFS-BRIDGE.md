@@ -71,7 +71,7 @@ Both UnixFS and Iroh Collections can represent collections of content using cont
 
 An Iroh Collection is not a replacement encoding for an existing UnixFS DAG. Converting UnixFS to a flat collection changes the representation and loses the original subtree-addressing semantics. It may be useful as an additional export format, but must not silently replace the original DAG or root CID.
 
-The IPFS comparison documentation also notes that Iroh Collection roots can be represented in CID form using Iroh-related multicodecs. That is a representation convention for an Iroh Collection, not a UnixFS root CID.
+The IPFS comparison documentation also notes that Iroh Collection roots can be represented in CID form using the BLAKE3 and blake3_hashseq multicodecs. That is a representation convention for an Iroh Collection, not a UnixFS root CID.
 
 Sources:
 - [IPFS: Content addressing data sets](https://docs.ipfs.tech/how-to/content-addressing-data-sets/)
@@ -79,7 +79,7 @@ Sources:
 
 ## 4. A concrete precedent: iroh-dag-sync
 
-The N0 Computer repository [iroh-experiments](https://github.com/n0-computer/iroh-experiments) contains an experiment named [iroh-dag-sync](https://github.com/n0-computer/iroh-experiments/tree/main/iroh-dag-sync). Its stated goal is to bridge Iroh Blobs and IPFS DAGs, including DAGs whose CIDs do not use BLAKE3.
+The N0 Computer repository [iroh-experiments](https://github.com/n0-computer/iroh-experiments) contains an experiment named [iroh-dag-sync](https://github.com/n0-computer/iroh-experiments/tree/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync). Its stated goal is to bridge Iroh Blobs and IPFS DAGs, including DAGs whose CIDs do not use BLAKE3.
 
 The experiment demonstrates an architecture close to what Rust-IPFS needs:
 
@@ -112,11 +112,12 @@ There is a more important correctness issue for UnixFS: the current experiment's
 Rust-IPFS already has codec-aware block decoding. The bridge should build on that implementation rather than copy the prototype's DAG-CBOR-only extraction path.
 
 Relevant source:
-- [Experiment README](https://github.com/n0-computer/iroh-experiments/blob/main/iroh-dag-sync/README.md)
-- [Experiment import and command entry point](https://github.com/n0-computer/iroh-experiments/blob/main/iroh-dag-sync/src/main.rs)
-- [Experiment link tables](https://github.com/n0-computer/iroh-experiments/blob/main/iroh-dag-sync/src/tables.rs)
-- [Experiment sync protocol](https://github.com/n0-computer/iroh-experiments/blob/main/iroh-dag-sync/src/protocol.rs)
-- [Experiment sync implementation](https://github.com/n0-computer/iroh-experiments/blob/main/iroh-dag-sync/src/sync.rs)
+- [Experiment README](https://github.com/n0-computer/iroh-experiments/blob/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync/README.md)
+- [Experiment dependency manifest](https://github.com/n0-computer/iroh-experiments/blob/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync/Cargo.toml)
+- [Experiment import and command entry point](https://github.com/n0-computer/iroh-experiments/blob/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync/src/main.rs)
+- [Experiment link tables](https://github.com/n0-computer/iroh-experiments/blob/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync/src/tables.rs)
+- [Experiment sync protocol](https://github.com/n0-computer/iroh-experiments/blob/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync/src/protocol.rs)
+- [Experiment sync implementation](https://github.com/n0-computer/iroh-experiments/blob/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync/src/sync.rs)
 - [Iroh: DAG sync design article](https://www.iroh.computer/blog/iroh-dag-sync)
 
 ## 5. Rust-IPFS capabilities that should anchor the bridge
@@ -383,7 +384,7 @@ The first milestone is a correct, testable block/DAG bridge with explicit endpoi
 - [Iroh Global Content Discovery](https://www.iroh.computer/blog/iroh-global-content-discovery)
 - [Iroh 1.0 roadmap](https://www.iroh.computer/roadmap)
 - [Iroh as an IPFS-compatible library discussion](https://github.com/n0-computer/iroh/discussions/955)
-- [N0 Iroh experiments](https://github.com/n0-computer/iroh-experiments/tree/main/iroh-dag-sync)
+- [N0 Iroh experiments](https://github.com/n0-computer/iroh-experiments/tree/41ebc455678d7789459add9c2218d463bc74866a/iroh-dag-sync)
 
 ### IPFS and UnixFS
 
