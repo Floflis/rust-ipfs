@@ -20,7 +20,10 @@ use ipld_core::cid::{Cid, Version};
 use percent_encoding::percent_decode_str;
 use tokio::net::TcpListener;
 
-use crate::{unixfs::Entry, Ipfs, IpfsPath};
+use crate::{
+    Block, Ipfs, IpfsPath,
+    unixfs::ll::file::{FileReadFailed, visit::IdleFileVisit},
+};
 
 /// Default local HTTP Gateway address, matching Kubo's path gateway.
 pub const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8080";
@@ -72,42 +75,35 @@ async fn handle_request(
         Err(status) => return response(status, "invalid or unsupported IPFS path"),
     };
 
-    // UnixfsLs resolves the requested path and reports either a root directory
-    // plus its immediate entries, or a single file and its logical byte length.
-    let entries = match ipfs.unixfs().ls(ipfs_path.clone()).await {
-        Ok(entries) => entries,
-        Err(_) => return response(StatusCode::NOT_FOUND, "content not found"),
+    // Resolve only the selected root block. UnixfsLs walks file chunks while
+    // enumerating entries, which would defeat the point of ranged retrieval.
+    let root_block = match resolve_unixfs_block(&ipfs, ipfs_path.clone()).await {
+        Ok(block) => block,
+        Err(status) => return response(status, "content not found"),
     };
 
-    let is_directory = entries
-        .iter()
-        .any(|entry| matches!(entry, Entry::RootDirectory { .. }));
+    let (resolved_path, file_size) = match unixfs_file_size(&root_block) {
+        Ok(size) => (ipfs_path.clone(), size),
+        Err(FileReadFailed::UnexpectedType(node)) if node.is_directory() => {
+            if !trailing_slash {
+                return redirect_to_directory(request.uri());
+            }
 
-    let (resolved_path, file_size) = if is_directory {
-        if !trailing_slash {
-            return redirect_to_directory(request.uri());
+            let index_path = match ipfs_path.sub_path("index.html") {
+                Ok(path) => path,
+                Err(_) => return response(StatusCode::BAD_REQUEST, "invalid index path"),
+            };
+            let index_block = match resolve_unixfs_block(&ipfs, index_path.clone()).await {
+                Ok(block) => block,
+                Err(_) => return response(StatusCode::NOT_FOUND, "directory has no index.html"),
+            };
+            let size = match unixfs_file_size(&index_block) {
+                Ok(size) => size,
+                Err(_) => return response(StatusCode::NOT_FOUND, "directory has no index.html"),
+            };
+            (index_path, size)
         }
-
-        let Some(size) = entries.iter().find_map(|entry| match entry {
-            Entry::File { file, size, .. } if file == "index.html" => Some(*size as u64),
-            _ => None,
-        }) else {
-            return response(StatusCode::NOT_FOUND, "directory has no index.html");
-        };
-
-        let index_path = match ipfs_path.sub_path("index.html") {
-            Ok(path) => path,
-            Err(_) => return response(StatusCode::BAD_REQUEST, "invalid index path"),
-        };
-        (index_path, size)
-    } else {
-        let Some(size) = entries.iter().find_map(|entry| match entry {
-            Entry::File { size, .. } => Some(*size as u64),
-            _ => None,
-        }) else {
-            return response(StatusCode::NOT_FOUND, "file not found");
-        };
-        (ipfs_path, size)
+        Err(_) => return response(StatusCode::NOT_FOUND, "unsupported or missing UnixFS content"),
     };
 
     let selected_range = if method == Method::GET {
@@ -171,6 +167,27 @@ async fn handle_request(
     };
 
     builder.body(body).expect("static response headers are valid")
+}
+
+async fn resolve_unixfs_block(ipfs: &Ipfs, path: IpfsPath) -> Result<Block, StatusCode> {
+    let (resolved, _) = ipfs
+        .dag()
+        .resolve(path, true, &[], false)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    resolved
+        .into_unixfs_block()
+        .map_err(|_| StatusCode::NOT_FOUND)
+}
+
+fn unixfs_file_size(block: &Block) -> Result<u64, FileReadFailed> {
+    if block.cid().codec() == 0x55 {
+        Ok(IdleFileVisit::default().start_from_raw(block.data()).1)
+    } else {
+        IdleFileVisit::default()
+            .start(block.data())
+            .map(|(_, size, _, _)| size)
+    }
 }
 
 fn parse_host(request: &Request<Body>) -> Result<GatewayHost, ()> {
