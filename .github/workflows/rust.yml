@@ -22,14 +22,14 @@ jobs:
       - run: cargo test --bin ipfs
       # The HTTP Gateway is opt-in and is not covered by the default feature set.
       - run: cargo check --features http-gateway
-      - run: cargo test --features http-gateway http_gateway
-      # Capture Cargo's resolved dependency graph so Cargo.lock can be committed
-      # instead of leaving the feature build to update it only in ephemeral CI.
+      # Upload the lockfile immediately after Cargo has resolved the optional
+      # dependency graph, even if a later test fails.
       - uses: actions/upload-artifact@v4
         with:
           name: http-gateway-cargo-lock
           path: Cargo.lock
           if-no-files-found: error
+      - run: cargo test --features http-gateway http_gateway
 
   check-wasm:
     name: Check (wasm)
