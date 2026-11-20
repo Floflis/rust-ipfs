@@ -139,6 +139,11 @@ Keep inbound servers distinct from outbound clients.
 
 #### HTTP Gateway server
 
+The dedicated implementation plan is maintained in [HTTP-GATEWAY-ROADMAP.md](HTTP-GATEWAY-ROADMAP.md). It specifies five implementation blocks: (1) HTTP server/lifecycle, (2) CID/path routing and DAG/UnixFS resolution, (3) browser/web-server response behavior, (4) HTTP Range Requests, and (5) Subdomain Gateway host routing and origin isolation.
+
+The target local Gateway port is `8080`, matching Kubo. Path-style retrieval uses `127.0.0.1:8080/ipfs/<CID>/`; browser websites and DApps should use the Subdomain Gateway form `<CIDv1>.ipfs.localhost:8080` so each content root receives a separate browser origin. The new inbound server must remain distinct from the existing outbound `gateway` retrieval feature and from the HTTP RPC API.
+
+
 The current optional gateway feature is a **retrieval fallback client** that can use external trustless HTTP gateways. It is not a server that exposes this node's content over HTTP.
 
 A separate HTTP Gateway server is needed for Kubo-like serving behavior:

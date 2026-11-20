@@ -70,6 +70,13 @@ impl UnixfsCat {
         self
     }
 
+    /// Restricts emitted bytes to a zero-based, end-exclusive file range.
+    /// Blocks outside this interval can be skipped during UnixFS traversal.
+    pub fn range(mut self, range: Range<u64>) -> Self {
+        self.range = Some(range);
+        self
+    }
+
     pub fn provider(mut self, peer_id: PeerId) -> Self {
         if !self.providers.contains(&peer_id) {
             self.providers.push(peer_id);

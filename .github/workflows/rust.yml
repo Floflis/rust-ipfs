@@ -19,7 +19,17 @@ jobs:
         with:
           toolchain: stable
       - run: cargo check
+      # The HTTP Gateway is opt-in and is not covered by the default feature set.
+      - run: cargo check --features http-gateway
+      # Upload the lockfile immediately after Cargo has resolved the optional
+      # dependency graph, before any tests can fail or take a long time.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: http-gateway-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
       - run: cargo test --bin ipfs
+      - run: cargo test --features http-gateway http_gateway
 
   check-wasm:
     name: Check (wasm)
