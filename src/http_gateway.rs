@@ -530,7 +530,7 @@ mod tests {
 
         let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
         let request = format!(
-            "GET /ipfs/{cid} HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n"
+            "GET /ipfs/{cid} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
         );
         client.write_all(request.as_bytes()).await.unwrap();
 
@@ -539,7 +539,7 @@ mod tests {
         server.abort();
 
         let response = String::from_utf8(response_bytes).unwrap();
-        let (headers, body) = response.split_once("\\r\\n\\r\\n").unwrap();
+        let (headers, body) = response.split_once("\r\n\r\n").unwrap();
         assert!(headers.starts_with("HTTP/1.1 200"));
         assert!(headers.to_ascii_lowercase().contains("content-type: application/octet-stream"));
         assert_eq!(body.as_bytes(), content);
