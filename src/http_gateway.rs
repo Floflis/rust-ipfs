@@ -33,12 +33,14 @@ pub const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:8080";
 /// The caller owns listener creation and shutdown policy. This keeps the
 /// server reusable by applications and a future long-running daemon.
 pub async fn serve(ipfs: Ipfs, listener: TcpListener) -> std::io::Result<()> {
-    let app = Router::new()
+    axum::serve(listener, router(ipfs)).await
+}
+
+fn router(ipfs: Ipfs) -> Router {
+    Router::new()
         .route("/", any(handle_request))
         .route("/{*path}", any(handle_request))
-        .with_state(Arc::new(ipfs));
-
-    axum::serve(listener, app).await
+        .with_state(Arc::new(ipfs))
 }
 
 /// Bind the default loopback listener and start serving until the task is aborted.
@@ -467,6 +469,7 @@ mod tests {
     use crate::builder::DefaultIpfsBuilder;
     use axum::body::to_bytes;
     use bytes::Bytes;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     async fn gateway_request(
         ipfs: &Ipfs,
@@ -508,6 +511,38 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         assert!(parse_host(&request).is_err());
+    }
+
+    #[tokio::test]
+    async fn serves_a_local_unixfs_file_over_the_http_listener() {
+        let ipfs = test_node().await;
+        let content = b"served through a real TCP HTTP connection";
+        let path = ipfs
+            .unixfs()
+            .add(Bytes::from_static(content))
+            .await
+            .unwrap();
+        let cid = path.root().cid().unwrap().to_string();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(serve(ipfs, listener));
+
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let request = format!(
+            "GET /ipfs/{cid} HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n"
+        );
+        client.write_all(request.as_bytes()).await.unwrap();
+
+        let mut response_bytes = Vec::new();
+        client.read_to_end(&mut response_bytes).await.unwrap();
+        server.abort();
+
+        let response = String::from_utf8(response_bytes).unwrap();
+        let (headers, body) = response.split_once("\\r\\n\\r\\n").unwrap();
+        assert!(headers.starts_with("HTTP/1.1 200"));
+        assert!(headers.to_ascii_lowercase().contains("content-type: application/octet-stream"));
+        assert_eq!(body.as_bytes(), content);
     }
 
     #[tokio::test]
