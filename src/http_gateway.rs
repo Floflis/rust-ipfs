@@ -491,6 +491,8 @@ mod tests {
 
     async fn test_node() -> Ipfs {
         DefaultIpfsBuilder::new()
+            .with_default()
+            .enable_memory_transport()
             .start()
             .await
             .expect("in-memory IPFS node should start")
