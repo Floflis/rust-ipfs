@@ -1,0 +1,41 @@
+name: Linux multiarch cross-checks
+
+on:
+  pull_request:
+    branches: [libp2p-next]
+  push:
+    branches: [libp2p-next]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-multiarch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-check:
+    name: Cargo check (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+          - armv7-unknown-linux-gnueabihf
+          - riscv64gc-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-multiarch-${{ matrix.target }}
+      - name: Check the IPFS executable and default feature set
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo check --bin ipfs --target "$TARGET"
