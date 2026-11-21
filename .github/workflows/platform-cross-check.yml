@@ -38,4 +38,4 @@ jobs:
       - name: Check the IPFS executable and default feature set
         env:
           TARGET: ${{ matrix.target }}
-        run: cargo check --locked --bin ipfs --target "$TARGET"
+        run: cargo check --bin ipfs --target "$TARGET"
